@@ -22,20 +22,30 @@ var se = Application('System Events');
 var p = se.processes.byName('aTrust');
 var mode=String($.getenv('KG_ATRUST_UI_MODE'));
 var page=null;
+var browserDebug={};
 function schoolBrowser() {
  try {
-  var sp=se.processes.byName('Safari');if(!sp.exists()||!sp.windows().length)return null;
+  var sp=se.processes.byName('Safari');
+  browserDebug.windows=sp.windows().length;if(!browserDebug.windows)return null;
+  browserDebug.exists=true;
   sp.frontmost=true;
-  se.keystroke('l',{using:['command down']});delay(0.2);
   var all=sp.windows[0].entireContents();
-  var addresses=all.filter(function(e){return prop(e,'role')==='AXTextField'&&/^https?:\/\//i.test(prop(e,'value'));});
-  if(addresses.length!==1){se.keyCode(53);return null;}
-  var url=prop(addresses[0],'value');
-  se.keyCode(53);
+  var areas=all.filter(function(e){return prop(e,'role')==='AXWebArea';});
+  browserDebug.web_areas=areas.length;
+  var urls=areas.map(function(e){return attr(e,'AXURL');}).filter(function(value){return /^https?:\/\//i.test(value);});
+  var url=urls.length?urls[0]:'';
+  if(!url){
+   se.keystroke('l',{using:['command down']});delay(0.2);
+   all=sp.windows[0].entireContents();
+   var addresses=all.filter(function(e){return /AXTextField|AXComboBox/.test(prop(e,'role'))&&/^https?:\/\//i.test(prop(e,'value'));});
+   browserDebug.address_controls=addresses.length;
+   url=addresses.length===1?prop(addresses[0],'value'):'';
+   se.keyCode(53);
+  }
   var match=url.match(/^(https?):\/\/([^\/:?#]+)(?::\d+)?(\/[^?#]*)?/i);
   if(!match||!/(^|\.)hit\.edu\.cn$/i.test(match[2]))return null;
-  return {address:addresses[0],url:url,origin:match[1]+'://'+match[2],secure:match[1].toLowerCase()==='https'};
- }catch(x){return null;}
+  return {url:url,origin:match[1]+'://'+match[2],secure:match[1].toLowerCase()==='https'};
+ }catch(x){browserDebug.error=String(x).slice(0,300);return null;}
 }
 if(['inspect','login','upgrade-https'].indexOf(mode)>=0){
  page=schoolBrowser();if(page)p=se.processes.byName('Safari');
@@ -65,7 +75,7 @@ if(mode==='connect') {
  var hints=fs.map(function(e){return {secure:secure(e),hint:hint(e),role:prop(e,'role'),subrole:prop(e,'subrole')};});
  var text=es.filter(function(e){return prop(e,'role')==='AXStaticText';}).map(function(e){return prop(e,'name')||prop(e,'value');}).join(' ');
  JSON.stringify({fields:hints,form_text:text,has_password:pw.length>0,challenge:fs.some(function(e){return /captcha|verification code|验证码|动态码|短信/i.test(hint(e));}),
-                 browser_origin:page?page.origin:null,requires_https:page?!page.secure:false,
+                 browser_origin:page?page.origin:null,browser_diagnostics:browserDebug,requires_https:page?!page.secure:false,
                  certificate_warning:/This Connection Is Not Private|此连接非私密|证书无效|证书已过期/i.test(text),
                  theme_update:/theme update is available|主题.*更新/i.test(text),
                  cas_entry:/UIA\s*[–-]\s*CAS/i.test(text)&&!pw.length,
@@ -84,7 +94,7 @@ if(mode==='connect') {
  JSON.stringify({cas_opened:true});
 } else if(mode==='upgrade-https') {
  if(!page||page.secure)throw Error('Expected an HTTP school page before HTTPS navigation');
- typeIn(page.address,page.url.replace(/^http:/i,'https:'));se.keyCode(36);
+ se.keystroke('l',{using:['command down']});se.keystroke(page.url.replace(/^http:/i,'https:'));se.keyCode(36);
  JSON.stringify({https_requested:true});
 } else if(mode==='login') {
  if(page&&!page.secure)throw Error('School browser login requires HTTPS');
