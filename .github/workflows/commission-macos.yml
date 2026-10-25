@@ -15,6 +15,18 @@ on:
           - atrust-full-tests
           - ssh-only
           - full-tests
+      task:
+        description: Native input set to execute after SSH verification
+        required: true
+        default: original
+        type: choice
+        options:
+          - original
+          - showcase
+      showcase_sha256:
+        description: Frozen showcase ZIP SHA-256 (required for showcase)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -30,6 +42,9 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Provision Python for the current five-case showcase replay
+        if: inputs.task == 'showcase'
+        run: brew list python@3.11 >/dev/null 2>&1 || brew install python@3.11
       - name: Join the project tailnet when enabled
         if: vars.KG_USE_TAILSCALE == 'true' && !startsWith(inputs.phase, 'atrust-')
         uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4
@@ -85,6 +100,8 @@ jobs:
       - name: Wait for manual school login, then execute native project tests
         if: inputs.phase == 'atrust-manual'
         env:
+          KG_NATIVE_TASK: ${{ inputs.task }}
+          KG_SHOWCASE_BUNDLE_SHA256: ${{ inputs.showcase_sha256 }}
           KG_SSH_HOST: ${{ vars.KG_SSH_HOST || 'tibaiot.7766.org' }}
           KG_SSH_PORT: ${{ vars.KG_SSH_PORT || '60005' }}
           KG_SSH_USER: ${{ vars.KG_SSH_USER || 'dujx' }}

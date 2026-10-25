@@ -32,7 +32,7 @@ except ImportError:
     import run_commission_macos_actions as native
 
 TUNNEL_URL = 'https://github.com/cloudflare/cloudflared/releases/download/2026.10.3/cloudflared-darwin-arm64.tgz'
-TUNNEL_SHA = '1165d14b6f6360a3b8c283d7d1100024d6ec7cd9bc9e32519e96150645f3ec55'
+TUNNEL_SHA = 'f249139e0541fa589c987397d867cc16c83ab1236d31eb6782f2e4552ee9cf80'
 UI = Path(__file__).with_name('macos-manual-ui')
 KEYS = {'Enter': 36, 'Tab': 48, 'Backspace': 51, 'Escape': 53, 'Delete': 117,
         'ArrowLeft': 123, 'ArrowRight': 124, 'ArrowDown': 125, 'ArrowUp': 126,
@@ -331,7 +331,10 @@ def wait(state, timeout):
                 os.environ.update(ssh_credentials)
                 ssh_credentials.clear()
                 print('人工登录后校园网SSH已可达，继续双向SSH及原生项目测试。', flush=True)
-                return native.main(['--output', 'ci-results'])
+                arguments = ['--output', 'ci-results']
+                if os.environ.get('KG_NATIVE_TASK') == 'showcase':
+                    arguments.append('--showcase')
+                return native.main(arguments)
             time.sleep(2)
         raise RuntimeError('人工操作等待时间已结束，未执行原生项目测试')
     except Exception as error:

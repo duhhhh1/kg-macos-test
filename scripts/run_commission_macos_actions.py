@@ -125,6 +125,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=Path('ci-results'))
     parser.add_argument('--ssh-only', action='store_true', help='Verify both SSH directions without executing project tests.')
+    parser.add_argument('--showcase', action='store_true', help='Replay the current five showcase inputs per domain after verifying both SSH directions.')
     args = parser.parse_args(argv)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -227,6 +228,48 @@ def main(argv=None):
             summary['status'] = 'ssh_only_completed'
             exit_code = 0
             progress('ssh_only_completed')
+            return 0
+        if args.showcase:
+            progress('downloading')
+            metadata = json_request(dashboard + '/api/showcase-replay')
+            expected_bundle = os.environ.get('KG_SHOWCASE_BUNDLE_SHA256', '')
+            if not re.fullmatch(r'[a-f0-9]{64}', expected_bundle) or metadata.get('bundle_sha256') != expected_bundle:
+                raise ValueError('Current showcase bundle differs from the SHA pinned when this job started.')
+            archive = work / 'showcase.zip'
+            with urlopen(dashboard + '/api/showcase-replay-bundle', timeout=120) as source, archive.open('wb') as target:
+                shutil.copyfileobj(source, target)
+            if sha(archive) != expected_bundle:
+                raise ValueError('Showcase ZIP SHA mismatch')
+            replay = work / 'showcase'
+            with zipfile.ZipFile(archive) as bundle:
+                total = 0
+                for item in bundle.infolist():
+                    name = PurePosixPath(item.filename)
+                    total += item.file_size
+                    if name.is_absolute() or '..' in name.parts or total > 96 * 1024 * 1024:
+                        raise ValueError('Unsafe showcase bundle')
+                bundle.extractall(replay)
+            prefix = subprocess.run(['brew', '--prefix', 'python@3.11'], check=True, capture_output=True, text=True).stdout.strip()
+            runtime = Path(prefix) / 'bin/python3.11'
+            environment_path = work / 'showcase-venv'
+            subprocess.run([str(runtime), '-m', 'venv', str(environment_path)], check=True)
+            python = environment_path / 'bin/python'
+            subprocess.run([str(python), '-m', 'pip', 'install', '--disable-pip-version-check', 'numpy>=2.1,<3', 'requests', 'Pillow'], check=True)
+            progress('running')
+            results = output / 'showcase-native'
+            with (output / 'native-console.log').open('w', encoding='utf-8') as log:
+                native = subprocess.Popen([str(python), '-X', 'utf8', '-B', str(replay / 'run_commission_showcase.py'),
+                    '--bundle', str(replay), '--dashboard', dashboard, '--output', str(results)], stdout=log, stderr=subprocess.STDOUT)
+                code = native.wait(timeout=3000)
+            report = json.loads((results / 'native-report.json').read_text(encoding='utf-8'))
+            if code or report.get('status') != 'completed' or report.get('environment', {}).get('system') != 'Darwin':
+                raise RuntimeError('Native showcase replay incomplete; original logs retained')
+            imported = json.loads(results.with_name(results.name + '-import.json').read_text(encoding='utf-8'))
+            summary.update(native_completed=True, dashboard_imported=True, import_run=imported['id'],
+                           status='completed', showcase_bundle=metadata['id'], showcase_answers=15)
+            exit_code = 0
+            progress('completed')
+            print('Current showcase: 15 real macOS answers and raw logs imported through SSH.', flush=True)
             return 0
         progress('downloading')
         metadata = json_request(dashboard + '/api/macos-kit')
@@ -335,7 +378,7 @@ def main(argv=None):
                                             'architecture', 'native_completed', 'dashboard_imported',
                                             'started_at', 'finished_at', 'exit_code', 'error')}
         public['ssh_bidirectional_passed'] = summary.get('connectivity', {}).get('status') == 'passed'
-        public['phase'] = 'ssh-only' if args.ssh_only else 'full-tests'
+        public['phase'] = 'showcase' if args.showcase else ('ssh-only' if args.ssh_only else 'full-tests')
         if not connected_to_workbench and (output / 'ssh.log').is_file():
             public['connection_failure_detail'] = (output / 'ssh.log').read_text(encoding='utf-8', errors='replace')[-3000:]
         save(output.parent / 'ci-public/summary.json', public)
