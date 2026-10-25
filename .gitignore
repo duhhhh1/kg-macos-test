@@ -1,5 +1,6 @@
 ci-results/
 ci-public/
+ci-manual/
 .runtime/
 *.pem
 *.key

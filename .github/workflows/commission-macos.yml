@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - atrust-preflight
+          - atrust-manual
           - atrust-ssh-only
           - atrust-full-tests
           - ssh-only
@@ -45,7 +46,7 @@ jobs:
         if: inputs.phase == 'atrust-preflight'
         run: python3 -u scripts/inspect_commission_atrust.py --output ci-public
       - name: Native execution, SSH model connection and evidence import
-        if: inputs.phase != 'atrust-preflight'
+        if: inputs.phase != 'atrust-preflight' && inputs.phase != 'atrust-manual'
         env:
           KG_SSH_HOST: ${{ vars.KG_SSH_HOST || 'tibaiot.7766.org' }}
           KG_SSH_PORT: ${{ vars.KG_SSH_PORT || '60005' }}
@@ -66,6 +67,34 @@ jobs:
           else
             python3 -u scripts/run_commission_macos_actions.py --output ci-results
           fi
+      - name: Prepare protected manual Mac screen without automatic account login
+        if: inputs.phase == 'atrust-manual'
+        env:
+          KG_MANUAL_ACCESS_TOKEN: ${{ secrets.KG_MANUAL_ACCESS_TOKEN }}
+          KG_SSH_HOST: ${{ vars.KG_SSH_HOST || 'tibaiot.7766.org' }}
+          KG_SSH_PORT: ${{ vars.KG_SSH_PORT || '60005' }}
+        run: python3 -u scripts/commission_macos_manual.py prepare --state ci-manual
+      - name: Publish only the protected screen address for the existing workbench
+        if: inputs.phase == 'atrust-manual'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: commission-macos-manual-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-public/manual-session.json
+          if-no-files-found: error
+          retention-days: 1
+      - name: Wait for manual school login, then execute native project tests
+        if: inputs.phase == 'atrust-manual'
+        env:
+          KG_SSH_HOST: ${{ vars.KG_SSH_HOST || 'tibaiot.7766.org' }}
+          KG_SSH_PORT: ${{ vars.KG_SSH_PORT || '60005' }}
+          KG_SSH_USER: ${{ vars.KG_SSH_USER || 'dujx' }}
+          KG_MACOS_KIT_SHA256: ${{ vars.KG_MACOS_KIT_SHA256 || 'e8adf68fba1ac031737a0af5101f63cb04b7cb64da0758c42378957c52a8c555' }}
+          KG_CI_SSH_KEY: ${{ secrets.KG_CI_SSH_KEY }}
+          KG_CI_SSH_KNOWN_HOSTS: ${{ secrets.KG_CI_SSH_KNOWN_HOSTS }}
+        run: python3 -u scripts/commission_macos_manual.py wait --state ci-manual --timeout 1800
+      - name: Close this run's temporary screen and HTTPS connection
+        if: always() && inputs.phase == 'atrust-manual'
+        run: python3 -u scripts/commission_macos_manual.py cleanup --state ci-manual
       - name: Preserve public status summary (full evidence returns to the workbench)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
