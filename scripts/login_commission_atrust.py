@@ -23,6 +23,12 @@ var p = se.processes.byName('aTrust');
 var mode=String($.getenv('KG_ATRUST_UI_MODE'));
 var page=null;
 var browserDebug={};
+function schoolURL(value) {
+ value=String(value).trim();
+ if(/^https?:\/\//i.test(value))return value;
+ if(/^ids-hit-edu-cn-s\.vpn\.hit\.edu\.cn:1080(\/|$)/i.test(value))return 'http://'+value;
+ return '';
+}
 function schoolBrowser() {
  try {
   var sp=se.processes.byName('Safari');
@@ -32,19 +38,23 @@ function schoolBrowser() {
   var all=sp.windows[0].entireContents();
   var areas=all.filter(function(e){return prop(e,'role')==='AXWebArea';});
   browserDebug.web_areas=areas.length;
-  var urls=areas.map(function(e){return attr(e,'AXURL');}).filter(function(value){return /^https?:\/\//i.test(value);});
+  var urls=areas.map(function(e){return schoolURL(attr(e,'AXURL'));}).filter(Boolean);
   var url=urls.length?urls[0]:'';
   if(!url){
    se.keystroke('l',{using:['command down']});delay(0.2);
    all=sp.windows[0].entireContents();
-   var addresses=all.filter(function(e){return /AXTextField|AXComboBox/.test(prop(e,'role'))&&/^https?:\/\//i.test(prop(e,'value'));});
+   var inputs=all.filter(function(e){return /AXTextField|AXComboBox/.test(prop(e,'role'));});
+   browserDebug.address_fields=inputs.map(function(e){var v=prop(e,'value');return {role:prop(e,'role'),hint:hint(e),school_address:/\.hit\.edu\.cn/i.test(v)?v.split(/[?#]/)[0].slice(0,220):null};});
+   var addresses=inputs.filter(function(e){return !!schoolURL(prop(e,'value'));});
    browserDebug.address_controls=addresses.length;
-   url=addresses.length===1?prop(addresses[0],'value'):'';
+   url=addresses.length===1?schoolURL(prop(addresses[0],'value')):'';
    se.keyCode(53);
   }
-  var match=url.match(/^(https?):\/\/([^\/:?#]+)(?::\d+)?(\/[^?#]*)?/i);
+  var match=url.match(/^(https?):\/\/([^\/:?#]+)(:\d+)?(\/[^?#]*)?/i);
   if(!match||!/(^|\.)hit\.edu\.cn$/i.test(match[2]))return null;
-  return {url:url,origin:match[1]+'://'+match[2],secure:match[1].toLowerCase()==='https'};
+  var origin=match[1]+'://'+match[2]+(match[3]||'');
+  var officialProxy=origin.toLowerCase()==='http://ids-hit-edu-cn-s.vpn.hit.edu.cn:1080';
+  return {url:url,origin:origin,secure:match[1].toLowerCase()==='https',official_proxy:officialProxy};
  }catch(x){browserDebug.error=String(x).slice(0,300);return null;}
 }
 if(['inspect','login','upgrade-https'].indexOf(mode)>=0){
@@ -75,7 +85,9 @@ if(mode==='connect') {
  var hints=fs.map(function(e){return {secure:secure(e),hint:hint(e),role:prop(e,'role'),subrole:prop(e,'subrole')};});
  var text=es.filter(function(e){return prop(e,'role')==='AXStaticText';}).map(function(e){return prop(e,'name')||prop(e,'value');}).join(' ');
  JSON.stringify({fields:hints,form_text:text,has_password:pw.length>0,challenge:fs.some(function(e){return /captcha|verification code|验证码|动态码|短信/i.test(hint(e));}),
-                 browser_origin:page?page.origin:null,browser_diagnostics:browserDebug,requires_https:page?!page.secure:false,
+                 browser_origin:page?page.origin:null,browser_diagnostics:browserDebug,
+                 official_school_proxy:page?page.official_proxy:false,
+                 requires_https:page?!page.secure&&!page.official_proxy:false,
                  certificate_warning:/This Connection Is Not Private|此连接非私密|证书无效|证书已过期/i.test(text),
                  theme_update:/theme update is available|主题.*更新/i.test(text),
                  cas_entry:/UIA\s*[–-]\s*CAS/i.test(text)&&!pw.length,
@@ -97,7 +109,7 @@ if(mode==='connect') {
  se.keystroke('l',{using:['command down']});se.keystroke(page.url.replace(/^http:/i,'https:'));se.keyCode(36);
  JSON.stringify({https_requested:true});
 } else if(mode==='login') {
- if(page&&!page.secure)throw Error('School browser login requires HTTPS');
+ if(page&&!page.secure&&!page.official_proxy)throw Error('Browser login requires HTTPS or the verified official school proxy');
  var usernames=fs.filter(function(e){return !secure(e)&&/student|work ID|username|account|学号|工号|用户名|账号/i.test(hint(e));});
  if(!usernames.length) usernames=fs.filter(function(e){return !secure(e)&&!/captcha|verification|验证码|动态码|短信/i.test(hint(e));});
  if(usernames.length!==1||pw.length!==1) throw Error('Cannot uniquely identify the account/password fields');
@@ -171,6 +183,9 @@ def main():
             view = ui('inspect')
             # This snapshot is taken only before any credentials are entered.
             inspection.save(folder, 'prelogin-state.json', view)
+            if view.get('browser_origin'):
+                summary['school_login_origin'] = view['browser_origin']
+                summary['official_school_proxy'] = view.get('official_school_proxy') is True
             if view.get('certificate_warning'):
                 raise RuntimeError('The school browser reported a certificate warning; no credentials were entered.')
             if view.get('requires_https'):
