@@ -4,6 +4,8 @@
 
 当前采用哈工大aTrust直接接入校园网，`KG_USE_TAILSCALE=false`。`atrust-preflight`检查客户端；`atrust-ssh-only`尝试一次正常账号登录并验证双向SSH；`atrust-full-tests`在连接通过后运行三领域原生测试。见 [aTrust校园网接入与验证指南](aTrust_macOS校园网接入与验证指南.md)。
 
+人工登录选择 `atrust-manual`：准备限时、受本轮凭据保护的Mac画面，通过现有工作台 `/macos-manual` 在Windows浏览器操作。本人完成学校认证后点击“登录完成，继续测试”；校园网SSH和双向连接实际通过后才运行项目。该模式使用 `KG_MANUAL_ACCESS_TOKEN` Secret，不自动填写学校账号。登录等待30分钟，画面最长45分钟，临时HTTPS和私有截图缓存随任务关闭。
+
 工作流固定使用公开仓库的标准 `macos-15` runner。按GitHub官方当前说明，公开仓库标准runner运行时长免费；工作流手动触发、最长90分钟，状态摘要Artifact保留7天。
 
 Tailscale保留为可选接入方式；当前aTrust阶段跳过它，无需为本方式配置Tailscale账号或OAuth。可选方案见 [Tailscale校园网接入指南](Tailscale_校园网与GitHub_Mac接入指南.md)。
