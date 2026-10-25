@@ -24,11 +24,17 @@ var mode=String($.getenv('KG_ATRUST_UI_MODE'));
 var page=null;
 function schoolBrowser() {
  try {
-  var b=Application('Safari');if(!b.running()||!b.documents().length)return null;
-  var url=String(b.documents[0].url());
+  var sp=se.processes.byName('Safari');if(!sp.exists()||!sp.windows().length)return null;
+  sp.frontmost=true;
+  se.keystroke('l',{using:['command down']});delay(0.2);
+  var all=sp.windows[0].entireContents();
+  var addresses=all.filter(function(e){return prop(e,'role')==='AXTextField'&&/^https?:\/\//i.test(prop(e,'value'));});
+  if(addresses.length!==1){se.keyCode(53);return null;}
+  var url=prop(addresses[0],'value');
+  se.keyCode(53);
   var match=url.match(/^(https?):\/\/([^\/:?#]+)(?::\d+)?(\/[^?#]*)?/i);
   if(!match||!/(^|\.)hit\.edu\.cn$/i.test(match[2]))return null;
-  return {browser:b,url:url,origin:match[1]+'://'+match[2],secure:match[1].toLowerCase()==='https'};
+  return {address:addresses[0],url:url,origin:match[1]+'://'+match[2],secure:match[1].toLowerCase()==='https'};
  }catch(x){return null;}
 }
 if(['inspect','login','upgrade-https'].indexOf(mode)>=0){
@@ -48,7 +54,7 @@ function clickLabel(es,rx) {
  if (!matches.length) return false;
  se.click(matches[matches.length-1]);return true;
 }
-function typeIn(e,text) {e.focused=true;se.keystroke('a',{using:['command down']});se.keystroke(text);}
+function typeIn(e,text) {se.click(e);e.focused=true;se.keystroke('a',{using:['command down']});se.keystroke(text);}
 var es=items(),fs=fields(es),pw=fs.filter(secure);
 if(mode==='connect') {
  if(fs.length!==1||pw.length) throw Error('Expected the initial one-field server address page');
@@ -78,7 +84,7 @@ if(mode==='connect') {
  JSON.stringify({cas_opened:true});
 } else if(mode==='upgrade-https') {
  if(!page||page.secure)throw Error('Expected an HTTP school page before HTTPS navigation');
- page.browser.documents[0].url=page.url.replace(/^http:/i,'https:');
+ typeIn(page.address,page.url.replace(/^http:/i,'https:'));se.keyCode(36);
  JSON.stringify({https_requested:true});
 } else if(mode==='login') {
  if(page&&!page.secure)throw Error('School browser login requires HTTPS');
@@ -99,8 +105,11 @@ def ui(mode, username=None, password=None):
     if username is not None:
         env['HIT_VPN_USERNAME'] = username
         env['HIT_VPN_PASSWORD'] = password
-    result = subprocess.run(['osascript', '-l', 'JavaScript', '-e', JXA], env=env,
-                            capture_output=True, text=True, timeout=30)
+    try:
+        result = subprocess.run(['osascript', '-l', 'JavaScript', '-e', JXA], env=env,
+                                capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError('The normal macOS UI timed out at stage: ' + mode) from None
     if result.returncode:
         # Do not publish UI values or native automation exception dumps.
         message = 'The normal aTrust UI could not complete stage: ' + mode
