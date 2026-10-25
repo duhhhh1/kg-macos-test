@@ -25,7 +25,7 @@ function prop(e,n) {try {return String(e[n]());} catch(x) {return '';}}
 function attr(e,n) {try {return String(e.attributes.byName(n).value());} catch(x) {return '';}}
 function items() {return p.windows[0].entireContents();}
 function fields(es) {return es.filter(function(e){return prop(e,'role')==='AXTextField';});}
-function secure(e) {return /secure/i.test(prop(e,'subrole'));}
+function secure(e) {return /secure/i.test(prop(e,'subrole')+' '+attr(e,'AXSubrole'));}
 function hint(e) {return [prop(e,'description'),prop(e,'name'),attr(e,'AXPlaceholderValue')].join(' ');}
 function clickLabel(es,rx) {
  var matches=es.filter(function(e){var r=prop(e,'role');return (r==='AXStaticText'||r==='AXButton')&&rx.test(prop(e,'name')||prop(e,'value'));});
@@ -41,9 +41,9 @@ if(mode==='connect') {
  if(!clickLabel(es,/^OK$|^确定$|^连接$/i)) se.keyCode(36);
  JSON.stringify({connected_form_submitted:true});
 } else if(mode==='inspect') {
- var hints=fs.map(function(e){return {secure:secure(e),hint:hint(e)};});
+ var hints=fs.map(function(e){return {secure:secure(e),hint:hint(e),role:prop(e,'role'),subrole:prop(e,'subrole')};});
  var text=es.filter(function(e){return prop(e,'role')==='AXStaticText';}).map(function(e){return prop(e,'name')||prop(e,'value');}).join(' ');
- JSON.stringify({fields:hints,has_password:pw.length>0,challenge:fs.some(function(e){return /captcha|verification code|验证码|动态码|短信/i.test(hint(e));}),
+ JSON.stringify({fields:hints,form_text:text,has_password:pw.length>0,challenge:fs.some(function(e){return /captcha|verification code|验证码|动态码|短信/i.test(hint(e));}),
                  account_tab:/Account login|账号登录|帐户登录/.test(text),
                  login_rejected:/密码错误|账号或密码|用户名或密码|incorrect password|invalid credentials/i.test(text)});
 } else if(mode==='account-tab') {
@@ -103,6 +103,8 @@ def main():
         tab_clicked = False
         while time.monotonic() < deadline:
             view = ui('inspect')
+            # This snapshot is taken only before any credentials are entered.
+            inspection.save(folder, 'prelogin-state.json', view)
             if view.get('challenge'):
                 raise RuntimeError('School login requires an interactive verification code; account credentials were not submitted.')
             if view.get('has_password'):
@@ -112,6 +114,7 @@ def main():
                 tab_clicked = True
             time.sleep(2)
         else:
+            inspection.run(['screencapture', '-x', str(folder / 'client-gateway-before-login.png')])
             raise RuntimeError('The school account/password form did not become available in this client.')
         summary['stage'] = 'atrust_account_login'
         ui('login', username, password)
