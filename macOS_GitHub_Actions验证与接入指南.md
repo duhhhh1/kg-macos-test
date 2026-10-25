@@ -6,7 +6,13 @@
 
 标准macos-15工作流已实际推送并执行，第一轮 `ssh-only` 运行号为 `40175179133`。该轮停在校园网连接阶段：`tibaiot.7766.org`解析为私网 `10.160.22.90`，GitHub连接60005超时，未执行原生项目测试。服务器现在可从GitHub回收本轮状态摘要和执行日志，在原网页查看。
 
-校园网环境改用Tailscale连接，两端加入同一Tailnet后仍执行相同的双向SSH及原生测试。新增两个Secrets `TS_OAUTH_CLIENT_ID` / `TS_OAUTH_SECRET`，并以实际Tailnet地址替换SSH目标。完整步骤见 [Tailscale校园网接入指南](Tailscale_校园网与GitHub_Mac接入指南.md)。
+当前按用户选择使用哈工大aTrust直接接入校园网，不要求Mac加入Tailscale。Tailscale只作为可选方案保留，见 [Tailscale校园网接入指南](Tailscale_校园网与GitHub_Mac接入指南.md)。
+
+## 哈工大aTrust直接接入方式
+
+当前用户选择通过学校aTrust接入校园网，GitHub Variable `KG_USE_TAILSCALE` 已设为false，SSH目标恢复为 `dujx@tibaiot.7766.org:60005`。工作流新增 `atrust-preflight`：实际Mac下载学校PKG，校验固定哈希及安装签名，再安装并检查普通启动和UI条件。真实运行40178251763、40178735495已确认客户端可在macOS15.7.9/ARM64安装并启动；账号登录、校园网连通与项目测试继续分别验证。
+
+`atrust-ssh-only`和`atrust-full-tests`从GitHub Secrets取得本人授权的学校账号，通过正常客户端界面尝试一次登录。验证码、二次认证及账号拒绝均停止，不自动重试账号密码。详见 [aTrust校园网接入与验证指南](aTrust_macOS校园网接入与验证指南.md)。公开Artifact只包含状态摘要及提交账号之前的安装/界面诊断；项目答卷与校园网凭据不包含其中。
 
 ## 免费使用条件与本次配置
 
@@ -40,6 +46,8 @@ GitHub 官方说明：公开仓库使用标准 GitHub-hosted runners 的运行�
 scripts/run_commission_macos_actions.py
 scripts/commission_macos_reverse_ssh.py
 scripts/macos-controller-public-key.pub
+scripts/inspect_commission_atrust.py
+scripts/login_commission_atrust.py
 kit-reference.json
 macOS_GitHub_Actions验证与接入指南.md
 ```
@@ -48,7 +56,7 @@ macOS_GitHub_Actions验证与接入指南.md
 
 服务器同时保存了一份可提交的仓库副本：`experiments/commission_testing/tools/github/kg-macos-test`。准备文件和本地提交不等于已经推送到GitHub；是否完成发布需查看远端默认分支。
 
-## 必须配置的两个 Secrets：名称和来源
+## Secrets：名称和来源
 
 进入仓库 https://github.com/duhhhh1/kg-macos-test/settings/secrets/actions ，选择 **New repository secret**。
 
@@ -56,6 +64,10 @@ macOS_GitHub_Actions验证与接入指南.md
 | --- | --- |
 | `KG_CI_SSH_KEY` | 本轮新建的、供Mac runner登录Linux的专用私钥。服务器文件：`/home/dujx/.ssh/kg_commission_github_ci_ed25519`。通过自己的VS Code文件编辑器读取完整内容并粘贴到GitHub Secrets；不要提交到仓库或发送到聊天。对应公钥已加入Linux用户authorized_keys，并限制转发目标为工作台18765、模型18100和反向端口32315。 |
 | `KG_CI_SSH_KNOWN_HOSTS` | 已核验的Linux SSH入口主机公钥条目。可从Windows已经验证成功的 `C:\Users\86185\.ssh\known_hosts` 中取得 `[tibaiot.7766.org]:60005` 对应条目。服务器也生成了候选文件 `experiments/commission_testing/tools/macos-actions/ci-server-known-hosts.txt`，按当前Linux主机SSH公钥生成；若公网入口对应其他SSH网关，应使用该入口实际且已核验的公钥。 |
+| `HIT_VPN_USERNAME` | aTrust方式需要，本人获授权的学校账号，直接填入GitHub Repository Secrets。 |
+| `HIT_VPN_PASSWORD` | aTrust方式需要，与上述账号对应的密码，只填GitHub Secrets；不放进源码、聊天、公开日志或Artifact。 |
+
+本仓库目前已配置以上四个Secrets；只查看运行记录无需再次填写。当前aTrust方式无需配置 `TS_OAUTH_CLIENT_ID` 或 `TS_OAUTH_SECRET`。
 
 主机公钥条目形式：
 
@@ -84,14 +96,14 @@ macOS_GitHub_Actions验证与接入指南.md
 
 **本次已验证**：新CI密钥可以登录Linux本机SSH，并通过转发访问现有工作台。
 
-**已实际验证的网络限制**：GitHub第一轮Mac连接 `tibaiot.7766.org:60005` 超时。该域名解析为校园网私网地址，当前改用Tailscale私有入口；新的Mac→Linux路径仍以Tailscale接入后的实际SSH验证为准。
+**已实际验证的网络限制**：GitHub第一轮Mac直连 `tibaiot.7766.org:60005` 超时。该域名解析为校园网私网地址，当前先连接学校aTrust，再以实际SSH探测判断校园网资源是否可达。
 
 ## 第一次运行：只验证Linux与Mac双向SSH
 
 1. 打开 https://github.com/duhhhh1/kg-macos-test/actions 。
 2. 左侧点击 **macOS native commission tests**。
 3. 点击 **Run workflow**。
-4. `phase`选择 **ssh-only**，再点击绿色 **Run workflow**。
+4. 当前校园网方式将`phase`选择 **atrust-ssh-only**，再点击绿色 **Run workflow**。已经有可达SSH网络的环境可使用 **ssh-only**。
 5. 等待本轮结束。它会完成：
    - Mac通过专用密钥登录Linux，转发工作台18765和模型18100；
    - Mac启动仅监听本机回环地址的临时sshd；
@@ -107,8 +119,8 @@ Mac的临时sshd只接受专用公钥，强制执行固定的系统信息探测�
 
 ## 第二次运行：执行三领域项目测试
 
-1. 确认上一次 `ssh-only`通过。
-2. 再次 **Run workflow**，将`phase`改为 **full-tests**。
+1. 确认上一次 `atrust-ssh-only`通过。
+2. 再次 **Run workflow**，将`phase`改为 **atrust-full-tests**。已经有可达SSH网络的环境可使用 **full-tests**。
 3. 工作流会再次验证双向SSH。只有本轮连接通过，才继续下载并校验完整运行包。
 4. 在实际Mac上执行三领域环境、schema、Python API、CLI、retrieve、源行核验，以及每领域3条真实图文输入，共9条回答。
 5. 核对原生完成摘要与平台证据SHA-256，再将平台JSON和完整原生结果ZIP回传当前工作台。
@@ -121,7 +133,7 @@ Mac的临时sshd只接受专用公钥，强制执行固定的系统信息探测�
 
 完整原图、问题、知识检索、模型回答和逐阶段日志保存到现有Linux工作台。网页支持按段查看及下载原始结果ZIP。连接成功后的失败轮次也会尝试回传日志，失败不会产生原生通过结论。
 
-GitHub公开Artifact只保存 `summary.json`，包括阶段、实际系统/架构、连接是否通过、原生是否完成、是否回传和退出码，保留7天。未连上工作台的连接错误可在该摘要查看；此时尚无项目题目或模型回答被执行。
+GitHub公开Artifact保存 `summary.json`，包括阶段、实际系统/架构、连接是否通过、原生是否完成、是否回传和退出码，保留7天。aTrust还保存不含账号的安装、签名与初始界面诊断；账号提交之后不保存界面截图或完整UI内容。未连上工作台的连接错误可在摘要查看；此时尚无项目题目或模型回答被执行。
 
 Mac执行记录到达后自动出现在网页；讲解时无需登录GitHub查看答卷，也无需在Windows/Mac重新配置本地模型。
 
