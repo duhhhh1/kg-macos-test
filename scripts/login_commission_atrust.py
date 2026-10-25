@@ -23,7 +23,9 @@ var p = se.processes.byName('aTrust');
 p.frontmost = true;
 function prop(e,n) {try {return String(e[n]());} catch(x) {return '';}}
 function attr(e,n) {try {return String(e.attributes.byName(n).value());} catch(x) {return '';}}
-function items() {return p.windows[0].entireContents();}
+function items() {
+ var es=[];p.windows().forEach(function(w){es=es.concat(w.entireContents());});return es;
+}
 function fields(es) {return es.filter(function(e){return prop(e,'role')==='AXTextField';});}
 function secure(e) {return /secure/i.test(prop(e,'subrole')+' '+attr(e,'AXSubrole'));}
 function hint(e) {return [prop(e,'description'),prop(e,'name'),attr(e,'AXPlaceholderValue')].join(' ');}
@@ -44,10 +46,21 @@ if(mode==='connect') {
  var hints=fs.map(function(e){return {secure:secure(e),hint:hint(e),role:prop(e,'role'),subrole:prop(e,'subrole')};});
  var text=es.filter(function(e){return prop(e,'role')==='AXStaticText';}).map(function(e){return prop(e,'name')||prop(e,'value');}).join(' ');
  JSON.stringify({fields:hints,form_text:text,has_password:pw.length>0,challenge:fs.some(function(e){return /captcha|verification code|验证码|动态码|短信/i.test(hint(e));}),
+                 theme_update:/theme update is available|主题.*更新/i.test(text),
+                 cas_entry:/UIA\s*[–-]\s*CAS/i.test(text)&&!pw.length,
                  account_tab:/Account login|账号登录|帐户登录/.test(text),
                  login_rejected:/密码错误|账号或密码|用户名或密码|incorrect password|invalid credentials/i.test(text)});
 } else if(mode==='account-tab') {
  JSON.stringify({clicked:clickLabel(es,/^Account login$|^账号登录$|^帐户登录$/i)});
+} else if(mode==='dismiss-theme') {
+ if(!clickLabel(es,/^Later$|^稍后$|^以后再说$/i)) throw Error('Theme prompt Later button is unavailable');
+ JSON.stringify({dismissed:true});
+} else if(mode==='cas-entry') {
+ var checks=es.filter(function(e){return prop(e,'role')==='AXCheckBox';});
+ if(checks.length===1){if(!/^(1|true)$/.test(prop(checks[0],'value'))) se.click(checks[0]);}
+ else if(!clickLabel(es,/^I have read and accept|^我已阅读并(同意|接受)/i)) throw Error('Terms acceptance control is unavailable');
+ if(!clickLabel(items(),/^Log In$|^Login$|^登录$/i)) throw Error('Normal CAS login button is unavailable');
+ JSON.stringify({cas_opened:true});
 } else if(mode==='login') {
  var usernames=fs.filter(function(e){return !secure(e)&&/student|work ID|username|account|学号|工号|用户名|账号/i.test(hint(e));});
  if(!usernames.length) usernames=fs.filter(function(e){return !secure(e)&&!/captcha|verification|验证码|动态码|短信/i.test(hint(e));});
@@ -80,6 +93,8 @@ def main():
     args = parser.parse_args()
     username = os.environ.pop('HIT_VPN_USERNAME', '').strip()
     password = os.environ.pop('HIT_VPN_PASSWORD', '')
+    ssh_credentials = {key: os.environ.pop(key, '')
+                       for key in ('KG_CI_SSH_KEY', 'KG_CI_SSH_KNOWN_HOSTS')}
     folder = Path('ci-public')
     summary = {'schema': 'commission-macos-actions-v1', 'phase': 'atrust-login',
                'status': 'failed', 'stage': 'atrust_install', 'native_completed': False,
@@ -101,14 +116,23 @@ def main():
         print('University gateway submitted through the normal client UI.', flush=True)
         deadline = time.monotonic() + 100
         tab_clicked = False
+        cas_opened = False
         while time.monotonic() < deadline:
             view = ui('inspect')
             # This snapshot is taken only before any credentials are entered.
             inspection.save(folder, 'prelogin-state.json', view)
             if view.get('challenge'):
+                inspection.run(['screencapture', '-x', str(folder / 'client-gateway-before-login.png')])
                 raise RuntimeError('School login requires an interactive verification code; account credentials were not submitted.')
+            if view.get('theme_update'):
+                ui('dismiss-theme')
+                time.sleep(2)
+                continue
             if view.get('has_password'):
                 break
+            if view.get('cas_entry') and not cas_opened:
+                ui('cas-entry')
+                cas_opened = True
             if view.get('account_tab') and not tab_clicked:
                 ui('account-tab')
                 tab_clicked = True
@@ -144,6 +168,8 @@ def main():
         summary.update(status='atrust_campus_connected', stage='campus_ssh_reachable')
         inspection.save(folder, 'campus-connection.json', summary)
         print('Campus SSH is reachable. Verifying both SSH directions before project execution.', flush=True)
+        os.environ.update(ssh_credentials)
+        ssh_credentials.clear()
         handed_to_native = True
         return native.main(['--output', 'ci-results'] + (['--ssh-only'] if args.ssh_only else []))
     except Exception as error:
@@ -152,6 +178,7 @@ def main():
         return 1
     finally:
         username = password = ''
+        ssh_credentials.clear()
         if not handed_to_native:
             folder.mkdir(exist_ok=True)
             summary.update(finished_at=datetime.now(timezone.utc).isoformat(), exit_code=1)
