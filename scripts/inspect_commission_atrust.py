@@ -27,10 +27,10 @@ def save(folder, name, value):
     (folder / name).write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=Path('ci-public'))
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     summary = {'schema': 'commission-macos-actions-v1', 'phase': 'atrust-preflight',

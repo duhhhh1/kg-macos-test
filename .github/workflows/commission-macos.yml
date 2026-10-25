@@ -10,6 +10,8 @@ on:
         type: choice
         options:
           - atrust-preflight
+          - atrust-ssh-only
+          - atrust-full-tests
           - ssh-only
           - full-tests
 
@@ -28,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Join the project tailnet when enabled
-        if: vars.KG_USE_TAILSCALE == 'true' && inputs.phase != 'atrust-preflight'
+        if: vars.KG_USE_TAILSCALE == 'true' && !startsWith(inputs.phase, 'atrust-')
         uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -52,8 +54,14 @@ jobs:
           KG_CI_SSH_KEY: ${{ secrets.KG_CI_SSH_KEY }}
           KG_CI_SSH_KNOWN_HOSTS: ${{ secrets.KG_CI_SSH_KNOWN_HOSTS }}
           KG_TEST_PHASE: ${{ inputs.phase }}
+          HIT_VPN_USERNAME: ${{ secrets.HIT_VPN_USERNAME }}
+          HIT_VPN_PASSWORD: ${{ secrets.HIT_VPN_PASSWORD }}
         run: |
-          if [ "$KG_TEST_PHASE" = "ssh-only" ]; then
+          if [ "$KG_TEST_PHASE" = "atrust-ssh-only" ]; then
+            python3 -u scripts/login_commission_atrust.py --ssh-only
+          elif [ "$KG_TEST_PHASE" = "atrust-full-tests" ]; then
+            python3 -u scripts/login_commission_atrust.py
+          elif [ "$KG_TEST_PHASE" = "ssh-only" ]; then
             python3 -u scripts/run_commission_macos_actions.py --output ci-results --ssh-only
           else
             python3 -u scripts/run_commission_macos_actions.py --output ci-results
