@@ -2,6 +2,12 @@
 
 本方案对应仓库 https://github.com/duhhhh1/kg-macos-test ，仓库可见性为 Public。当前网站继续承担讲解、实时问答、实验结果和原始日志查看；GitHub 提供临时 macOS 原生执行环境。
 
+## 2026-10-25实际接入状态
+
+标准macos-15工作流已实际推送并执行，第一轮 `ssh-only` 运行号为 `40175179133`。该轮停在校园网连接阶段：`tibaiot.7766.org`解析为私网 `10.160.22.90`，GitHub连接60005超时，未执行原生项目测试。服务器现在可从GitHub回收本轮状态摘要和执行日志，在原网页查看。
+
+校园网环境改用Tailscale连接，两端加入同一Tailnet后仍执行相同的双向SSH及原生测试。新增两个Secrets `TS_OAUTH_CLIENT_ID` / `TS_OAUTH_SECRET`，并以实际Tailnet地址替换SSH目标。完整步骤见 [Tailscale校园网接入指南](Tailscale_校园网与GitHub_Mac接入指南.md)。
+
 ## 免费使用条件与本次配置
 
 GitHub 官方说明：公开仓库使用标准 GitHub-hosted runners 的运行时长免费。此次工作流固定 `runs-on: macos-15`，使用标准 Apple Silicon runner；没有选择 `-large`、`-xlarge` 等付费大型运行器。
@@ -78,7 +84,7 @@ macOS_GitHub_Actions验证与接入指南.md
 
 **本次已验证**：新CI密钥可以登录Linux本机SSH，并通过转发访问现有工作台。
 
-**仍需实际验证**：GitHub到公网入口的网络路径。本次从服务器探测 `tibaiot.7766.org:60005` 收到Connection refused；这不能替代GitHub runner的实际探测，也不能提前认定公网入口已打通。
+**已实际验证的网络限制**：GitHub第一轮Mac连接 `tibaiot.7766.org:60005` 超时。该域名解析为校园网私网地址，当前改用Tailscale私有入口；新的Mac→Linux路径仍以Tailscale接入后的实际SSH验证为准。
 
 ## 第一次运行：只验证Linux与Mac双向SSH
 
@@ -132,4 +138,4 @@ Mac执行记录到达后自动出现在网页；讲解时无需登录GitHub查�
 | SSH通过但项目测试未通过 | 查看网页原生执行日志，按实际异常修复后重跑，保留失败轮次 |
 | 原生完成但回传失败 | 该轮不宣称网站已导入；恢复工作台连接后重跑或补充导入本轮原始结果。公开Artifact不包含完整答卷 |
 
-当前准备、Linux侧验证和单元测试不等于已在GitHub启动实际Mac。以仓库真实运行号、双向SSH报告和原生项目记录为依据。
+GitHub已实际启动第一轮Mac连接验证，但校园网入口超时，尚未完成原生项目测试。以后续真实运行号、双向SSH报告和原生项目记录为依据。

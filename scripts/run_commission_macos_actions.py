@@ -162,6 +162,8 @@ def main(argv=None):
                      'GITHUB_REPOSITORY', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_SHA'):
             environment[name] = os.environ.get(name, '')
         save(output / 'ci-environment.json', environment)
+        summary.update(actual_system=environment['actual_system'], mac_version=environment['mac_version'],
+                       architecture=environment['architecture'])
         if platform.system() != 'Darwin':
             raise ValueError('Run this workflow on a macOS GitHub-hosted runner; Linux cannot supply macOS evidence.')
         host, user, port, expected = connection_settings(os.environ)
@@ -331,7 +333,7 @@ def main(argv=None):
         # images, answers and native logs are returned only to the workbench.
         public = {k: summary.get(k) for k in ('schema', 'status', 'stage', 'actual_system', 'mac_version',
                                             'architecture', 'native_completed', 'dashboard_imported',
-                                            'started_at', 'finished_at', 'exit_code')}
+                                            'started_at', 'finished_at', 'exit_code', 'error')}
         public['ssh_bidirectional_passed'] = summary.get('connectivity', {}).get('status') == 'passed'
         public['phase'] = 'ssh-only' if args.ssh_only else 'full-tests'
         if not connected_to_workbench and (output / 'ssh.log').is_file():

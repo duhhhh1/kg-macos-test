@@ -4,6 +4,8 @@
 
 工作流固定使用公开仓库的标准 `macos-15` runner。按GitHub官方当前说明，公开仓库标准runner运行时长免费；工作流手动触发、最长90分钟，状态摘要Artifact保留7天。
 
+校园网环境支持Tailscale：设置 `KG_USE_TAILSCALE=true`，配置 `TS_OAUTH_CLIENT_ID` / `TS_OAUTH_SECRET`，将SSH目标设为服务器Tailnet地址。步骤见 [Tailscale校园网接入指南](Tailscale_校园网与GitHub_Mac接入指南.md)。
+
 ## 配置和运行
 
 1. 在 **Settings → Secrets and variables → Actions** 添加两个Repository Secrets：

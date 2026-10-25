@@ -26,6 +26,18 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Join the project tailnet when enabled
+        if: vars.KG_USE_TAILSCALE == 'true'
+        uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:kg-ci
+          hostname: kg-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          version: 1.104.2
+          use-cache: 'false'
+          args: --accept-dns=false
+          ping: ${{ vars.KG_SSH_HOST }}
       - name: Native execution, SSH model connection and evidence import
         env:
           KG_SSH_HOST: ${{ vars.KG_SSH_HOST || 'tibaiot.7766.org' }}
