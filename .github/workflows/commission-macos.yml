@@ -9,6 +9,7 @@ on:
         default: ssh-only
         type: choice
         options:
+          - atrust-preflight
           - ssh-only
           - full-tests
 
@@ -27,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Join the project tailnet when enabled
-        if: vars.KG_USE_TAILSCALE == 'true'
+        if: vars.KG_USE_TAILSCALE == 'true' && inputs.phase != 'atrust-preflight'
         uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -38,7 +39,11 @@ jobs:
           use-cache: 'false'
           args: --accept-dns=false
           ping: ${{ vars.KG_SSH_HOST }}
+      - name: Inspect the university aTrust client on actual macOS
+        if: inputs.phase == 'atrust-preflight'
+        run: python3 -u scripts/inspect_commission_atrust.py --output ci-public
       - name: Native execution, SSH model connection and evidence import
+        if: inputs.phase != 'atrust-preflight'
         env:
           KG_SSH_HOST: ${{ vars.KG_SSH_HOST || 'tibaiot.7766.org' }}
           KG_SSH_PORT: ${{ vars.KG_SSH_PORT || '60005' }}
