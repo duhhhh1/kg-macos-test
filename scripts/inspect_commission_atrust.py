@@ -45,6 +45,7 @@ def main():
         if platform.system() != 'Darwin':
             raise ValueError('This inspection requires actual macOS.')
         summary['stage'] = 'atrust_download'
+        print('Downloading and checking the university macOS client...', flush=True)
         with tempfile.TemporaryDirectory(prefix='kg-atrust-inspect-') as temporary:
             package = Path(temporary) / 'aTrustInstaller.pkg'
             digest = hashlib.sha256()
@@ -63,6 +64,7 @@ def main():
                     or 'SANGFOR' not in details['package_signature']['output']):
                 raise ValueError('Expected valid SANGFOR installer signature.')
             summary['stage'] = 'atrust_install'
+            print('Signature verified; installing the university client...', flush=True)
             details['installer'] = run(['sudo', '-n', 'installer', '-pkg', str(package), '-target', '/'], timeout=900)
             if details['installer']['returncode']:
                 raise RuntimeError('Native macOS installer failed; see client-layout.json.')
@@ -77,19 +79,19 @@ def main():
         details['architecture'] = run(['file', str(executable)])
         details['app_signature'] = run(['codesign', '-dv', '--verbose=2', str(app)])
         summary['stage'] = 'atrust_start'
-        details['launch'] = run(['open', '-a', str(app), '--args', '--remote-debugging-port=19225',
-                                 '--remote-debugging-address=127.0.0.1'])
-        targets = []
-        for _ in range(25):
-            try:
-                with urlopen('http://127.0.0.1:19225/json', timeout=1) as response:
-                    values = json.load(response)
-                targets = [{'type': row.get('type'), 'title': row.get('title'), 'url': row.get('url')}
-                           for row in values if row.get('type') == 'page']
-                break
-            except (OSError, ValueError):
-                time.sleep(.4)
-        details['local_ui_targets'] = targets
+        print('Installation completed; checking normal launch and UI availability...', flush=True)
+        details['launch'] = run(['open', '-a', str(app)])
+        time.sleep(3)
+        details['ui_automation'] = run(['osascript', '-e',
+                                        'tell application "System Events" to get UI elements enabled'])
+        details['ui_windows'] = run(['osascript', '-e',
+                                    'tell application "System Events" to tell process "aTrust" to get name of every window'])
+        if details['ui_automation']['output'].strip() == 'true' and details['ui_windows']['returncode'] == 0:
+            details['ui_controls'] = run(['osascript', '-e',
+                                         'tell application "System Events" to tell process "aTrust" to get entire contents of window 1'])
+        tools = Path('/Library/sangfor/SDP/aTrust.app/Contents/Resources/bin/aTrustClientTools')
+        if tools.is_file():
+            details['client_tools_help'] = run([str(tools), '--help'], timeout=15)
         process = run(['pgrep', '-fl', 'aTrust'])
         details['processes'] = process
         details['system_extensions'] = run(['systemextensionsctl', 'list'])
@@ -100,7 +102,8 @@ def main():
         if details['launch']['returncode'] or process['returncode']:
             raise ValueError('Installed client did not start on this Mac.')
         summary.update(status='atrust_preflight_completed', stage='atrust_installed',
-                       client_installed=True, client_started=True, local_ui_available=bool(targets))
+                       client_installed=True, client_started=True,
+                       ui_automation_enabled=details['ui_automation']['output'].strip() == 'true')
         exit_code = 0
         print('aTrust installed and started on actual macOS; no credentials used.', flush=True)
     except Exception as error:
