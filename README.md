@@ -6,6 +6,8 @@
 
 人工登录选择 `atrust-manual`：准备限时、受本轮凭据保护的Mac画面，通过现有工作台 `/macos-manual` 在Windows浏览器操作。本人完成学校认证后点击“登录完成，继续测试”；校园网SSH和双向连接实际通过后才运行项目。该模式使用 `KG_MANUAL_ACCESS_TOKEN` Secret，不自动填写学校账号。登录等待30分钟，画面最长45分钟，临时HTTPS和私有截图缓存随任务关闭。
 
+实际运行40184802632已完成上述流程：macOS15.7.9 / ARM64 / Python3.11.17，双向SSH通过，三领域9条实际图文回答及完整日志已回传。现有工作台原生记录为`platform-c8407d5b0791`，可以直接查看。该轮临时Mac已正常回收，网页问答继续使用现有服务器模型。
+
 工作流固定使用公开仓库的标准 `macos-15` runner。按GitHub官方当前说明，公开仓库标准runner运行时长免费；工作流手动触发、最长90分钟，状态摘要Artifact保留7天。
 
 Tailscale保留为可选接入方式；当前aTrust阶段跳过它，无需为本方式配置Tailscale账号或OAuth。可选方案见 [Tailscale校园网接入指南](Tailscale_校园网与GitHub_Mac接入指南.md)。
@@ -25,7 +27,7 @@ Tailscale保留为可选接入方式；当前aTrust阶段跳过它，无需为�
 
 详细步骤、Secrets来源、端口说明和故障排查见 [macOS GitHub Actions验证与接入指南](macOS_GitHub_Actions验证与接入指南.md)。
 
-`ssh-only`验证连接，不生成macOS兼容性通过记录。`full-tests`在实际Mac运行三领域代码，通过原生结果与日志校验后才发布2CA；3CA还需与Windows同版本回答对照复核。
+`ssh-only`验证连接，不生成macOS兼容性通过记录。`full-tests`在实际Mac运行三领域代码，通过原生结果与日志校验后才发布2CA；3CA由现有工作台对照同版本核心、输入、原图和完整回答。原始核心指纹复算及全部回答逐项一致时自动记录该组一致性；回答文本有差异时需进一步业务复核。
 
 ## 官方依据
 
