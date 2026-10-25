@@ -2,6 +2,8 @@
 
 番茄、生猪、鱼类知识图谱项目的 macOS 原生兼容性与真实图文功能测试。
 
+哈工大校园网接入：工作流增加 `atrust-preflight`，在真实Mac下载学校PKG，校验SHA-256与安装签名，实际安装并检查启动和正常UI条件。该阶段不使用学校账号，也不生成原生项目通过。见 [aTrust校园网接入与验证指南](aTrust_macOS校园网接入与验证指南.md)。
+
 工作流固定使用公开仓库的标准 `macos-15` runner。按GitHub官方当前说明，公开仓库标准runner运行时长免费；工作流手动触发、最长90分钟，状态摘要Artifact保留7天。
 
 校园网环境支持Tailscale：设置 `KG_USE_TAILSCALE=true`，配置 `TS_OAUTH_CLIENT_ID` / `TS_OAUTH_SECRET`，将SSH目标设为服务器Tailnet地址。步骤见 [Tailscale校园网接入指南](Tailscale_校园网与GitHub_Mac接入指南.md)。

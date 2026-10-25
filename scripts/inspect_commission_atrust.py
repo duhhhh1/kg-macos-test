@@ -87,8 +87,14 @@ def main():
         details['ui_windows'] = run(['osascript', '-e',
                                     'tell application "System Events" to tell process "aTrust" to get name of every window'])
         if details['ui_automation']['output'].strip() == 'true' and details['ui_windows']['returncode'] == 0:
+            details['ui_accessibility'] = run(['osascript', '-e',
+                                               'tell application "System Events" to tell process "aTrust" to set value of attribute "AXEnhancedUserInterface" to true'])
+            details['ui_manual_accessibility'] = run(['osascript', '-e',
+                                                      'tell application "System Events" to tell process "aTrust" to set value of attribute "AXManualAccessibility" to true'])
+            time.sleep(5)
             details['ui_controls'] = run(['osascript', '-e',
                                          'tell application "System Events" to tell process "aTrust" to get entire contents of window 1'])
+            details['ui_screenshot'] = run(['screencapture', '-x', str(output / 'client-before-login.png')])
         tools = Path('/Library/sangfor/SDP/aTrust.app/Contents/Resources/bin/aTrustClientTools')
         if tools.is_file():
             details['client_tools_help'] = run([str(tools), '--help'], timeout=15)
