@@ -20,6 +20,20 @@ JXA = r'''
 ObjC.import('stdlib');
 var se = Application('System Events');
 var p = se.processes.byName('aTrust');
+var mode=String($.getenv('KG_ATRUST_UI_MODE'));
+var page=null;
+function schoolBrowser() {
+ try {
+  var b=Application('Safari');if(!b.running()||!b.documents().length)return null;
+  var url=String(b.documents[0].url());
+  var match=url.match(/^(https?):\/\/([^\/:?#]+)(?::\d+)?(\/[^?#]*)?/i);
+  if(!match||!/(^|\.)hit\.edu\.cn$/i.test(match[2]))return null;
+  return {browser:b,url:url,origin:match[1]+'://'+match[2],secure:match[1].toLowerCase()==='https'};
+ }catch(x){return null;}
+}
+if(['inspect','login','upgrade-https'].indexOf(mode)>=0){
+ page=schoolBrowser();if(page)p=se.processes.byName('Safari');
+}
 p.frontmost = true;
 function prop(e,n) {try {return String(e[n]());} catch(x) {return '';}}
 function attr(e,n) {try {return String(e.attributes.byName(n).value());} catch(x) {return '';}}
@@ -30,12 +44,11 @@ function fields(es) {return es.filter(function(e){return prop(e,'role')==='AXTex
 function secure(e) {return /secure/i.test(prop(e,'subrole')+' '+attr(e,'AXSubrole'));}
 function hint(e) {return [prop(e,'description'),prop(e,'name'),attr(e,'AXPlaceholderValue')].join(' ');}
 function clickLabel(es,rx) {
- var matches=es.filter(function(e){var r=prop(e,'role');return (r==='AXStaticText'||r==='AXButton')&&rx.test(prop(e,'name')||prop(e,'value'));});
+ var matches=es.filter(function(e){var r=prop(e,'role'),label=(prop(e,'name')||prop(e,'value')).trim();return (r==='AXStaticText'||r==='AXButton')&&(rx.test(label)||rx.test(label.replace(/\s/g,'')));});
  if (!matches.length) return false;
  se.click(matches[matches.length-1]);return true;
 }
 function typeIn(e,text) {e.focused=true;se.keystroke('a',{using:['command down']});se.keystroke(text);}
-var mode=String($.getenv('KG_ATRUST_UI_MODE'));
 var es=items(),fs=fields(es),pw=fs.filter(secure);
 if(mode==='connect') {
  if(fs.length!==1||pw.length) throw Error('Expected the initial one-field server address page');
@@ -46,6 +59,8 @@ if(mode==='connect') {
  var hints=fs.map(function(e){return {secure:secure(e),hint:hint(e),role:prop(e,'role'),subrole:prop(e,'subrole')};});
  var text=es.filter(function(e){return prop(e,'role')==='AXStaticText';}).map(function(e){return prop(e,'name')||prop(e,'value');}).join(' ');
  JSON.stringify({fields:hints,form_text:text,has_password:pw.length>0,challenge:fs.some(function(e){return /captcha|verification code|验证码|动态码|短信/i.test(hint(e));}),
+                 browser_origin:page?page.origin:null,requires_https:page?!page.secure:false,
+                 certificate_warning:/This Connection Is Not Private|此连接非私密|证书无效|证书已过期/i.test(text),
                  theme_update:/theme update is available|主题.*更新/i.test(text),
                  cas_entry:/UIA\s*[–-]\s*CAS/i.test(text)&&!pw.length,
                  account_tab:/Account login|账号登录|帐户登录/.test(text),
@@ -61,7 +76,12 @@ if(mode==='connect') {
  else if(!clickLabel(es,/^I have read and accept|^我已阅读并(同意|接受)/i)) throw Error('Terms acceptance control is unavailable');
  if(!clickLabel(items(),/^Log In$|^Login$|^登录$/i)) throw Error('Normal CAS login button is unavailable');
  JSON.stringify({cas_opened:true});
+} else if(mode==='upgrade-https') {
+ if(!page||page.secure)throw Error('Expected an HTTP school page before HTTPS navigation');
+ page.browser.documents[0].url=page.url.replace(/^http:/i,'https:');
+ JSON.stringify({https_requested:true});
 } else if(mode==='login') {
+ if(page&&!page.secure)throw Error('School browser login requires HTTPS');
  var usernames=fs.filter(function(e){return !secure(e)&&/student|work ID|username|account|学号|工号|用户名|账号/i.test(hint(e));});
  if(!usernames.length) usernames=fs.filter(function(e){return !secure(e)&&!/captcha|verification|验证码|动态码|短信/i.test(hint(e));});
  if(usernames.length!==1||pw.length!==1) throw Error('Cannot uniquely identify the account/password fields');
@@ -83,8 +103,18 @@ def ui(mode, username=None, password=None):
                             capture_output=True, text=True, timeout=30)
     if result.returncode:
         # Do not publish UI values or native automation exception dumps.
-        raise RuntimeError('The normal aTrust UI could not complete stage: ' + mode)
+        message = 'The normal aTrust UI could not complete stage: ' + mode
+        if mode in ('connect', 'dismiss-theme', 'cas-entry', 'account-tab'):
+            message += ' (' + result.stderr.strip()[-600:] + ')'
+        raise RuntimeError(message)
     return json.loads(result.stdout.strip())
+
+
+def prelogin_screenshot(folder):
+    try:
+        inspection.run(['screencapture', '-x', str(folder / 'client-gateway-before-login.png')])
+    except (OSError, subprocess.SubprocessError):
+        pass  # A diagnostic image must never change the authentication result.
 
 
 def main():
@@ -117,12 +147,22 @@ def main():
         deadline = time.monotonic() + 100
         tab_clicked = False
         cas_opened = False
+        https_requested = False
         while time.monotonic() < deadline:
             view = ui('inspect')
             # This snapshot is taken only before any credentials are entered.
             inspection.save(folder, 'prelogin-state.json', view)
+            if view.get('certificate_warning'):
+                raise RuntimeError('The school browser reported a certificate warning; no credentials were entered.')
+            if view.get('requires_https'):
+                if https_requested:
+                    raise RuntimeError('School browser login did not remain on HTTPS; no credentials were entered.')
+                ui('upgrade-https')
+                https_requested = True
+                time.sleep(3)
+                continue
             if view.get('challenge'):
-                inspection.run(['screencapture', '-x', str(folder / 'client-gateway-before-login.png')])
+                prelogin_screenshot(folder)
                 raise RuntimeError('School login requires an interactive verification code; account credentials were not submitted.')
             if view.get('theme_update'):
                 ui('dismiss-theme')
@@ -138,7 +178,7 @@ def main():
                 tab_clicked = True
             time.sleep(2)
         else:
-            inspection.run(['screencapture', '-x', str(folder / 'client-gateway-before-login.png')])
+            prelogin_screenshot(folder)
             raise RuntimeError('The school account/password form did not become available in this client.')
         summary['stage'] = 'atrust_account_login'
         ui('login', username, password)
@@ -174,6 +214,9 @@ def main():
         return native.main(['--output', 'ci-results'] + (['--ssh-only'] if args.ssh_only else []))
     except Exception as error:
         summary['error'] = str(error)
+        if summary['stage'] == 'atrust_server_address':
+            # This stage always precedes any account/password entry.
+            prelogin_screenshot(folder)
         print('aTrust login stopped: ' + str(error), flush=True)
         return 1
     finally:
