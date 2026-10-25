@@ -1,0 +1,20 @@
+{
+  "filename": "kg-commission-macos.zip",
+  "sha256": "e8adf68fba1ac031737a0af5101f63cb04b7cb64da0758c42378957c52a8c555",
+  "size": 667211704,
+  "packages": {
+    "tomato": {
+      "directory": "Facility_Tomato_MMQA_Decision_V1.0",
+      "fingerprint": "a47f394927e81d5e132e60e0ac33892cac3871b8c7dbba6e39384b978c196b2c"
+    },
+    "pig": {
+      "directory": "Facility_Pig_MMQA_Decision_V1.0",
+      "fingerprint": "07a7edb001292c58027045f5c0b324f3b3c4694f1452b2e7e95a73fcfeb4d8df"
+    },
+    "fish": {
+      "directory": "Facility_Fish_MMQA_Decision_V1.0",
+      "fingerprint": "fc55c950ba2dd5026c86788f23bf953b5c86713bea4c2404c69258bb45946135"
+    }
+  },
+  "download_path": "/api/macos-kit-download"
+}

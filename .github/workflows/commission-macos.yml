@@ -1,0 +1,51 @@
+name: macOS native commission tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Verify both SSH directions first, then run project tests
+        required: true
+        default: ssh-only
+        type: choice
+        options:
+          - ssh-only
+          - full-tests
+
+permissions:
+  contents: read
+
+# The server model and evidence import are shared. Serialize test jobs.
+concurrency:
+  group: kg-commission-macos
+  cancel-in-progress: false
+
+jobs:
+  native:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Native execution, SSH model connection and evidence import
+        env:
+          KG_SSH_HOST: ${{ vars.KG_SSH_HOST || 'tibaiot.7766.org' }}
+          KG_SSH_PORT: ${{ vars.KG_SSH_PORT || '60005' }}
+          KG_SSH_USER: ${{ vars.KG_SSH_USER || 'dujx' }}
+          KG_MACOS_KIT_SHA256: ${{ vars.KG_MACOS_KIT_SHA256 || 'e8adf68fba1ac031737a0af5101f63cb04b7cb64da0758c42378957c52a8c555' }}
+          KG_CI_SSH_KEY: ${{ secrets.KG_CI_SSH_KEY }}
+          KG_CI_SSH_KNOWN_HOSTS: ${{ secrets.KG_CI_SSH_KNOWN_HOSTS }}
+          KG_TEST_PHASE: ${{ inputs.phase }}
+        run: |
+          if [ "$KG_TEST_PHASE" = "ssh-only" ]; then
+            python3 -u scripts/run_commission_macos_actions.py --output ci-results --ssh-only
+          else
+            python3 -u scripts/run_commission_macos_actions.py --output ci-results
+          fi
+      - name: Preserve public status summary (full evidence returns to the workbench)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: commission-macos-15-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-public/
+          if-no-files-found: error
+          retention-days: 7
